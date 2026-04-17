@@ -17,6 +17,7 @@
 - **unitree_sdk2** 已安装到 `/opt/unitree_robotics/unitree_sdk2`（需要最新版，含 G1 `hg` IDL 和 `AudioClient`）
 - **CycloneDDS** 使用 SDK 自带的 `thirdparty/lib/aarch64/` 版本，不要用系统版
 - CMake ≥ 3.10、GCC ≥ 7、C++14
+- PC2 网络已配好（WiFi、路由、网卡）—— 详见文末 [环境配置指南](#-环境配置--environment-setup)
 
 ### 编译
 
@@ -59,6 +60,7 @@ SDK 装到非默认路径时：`cmake .. -DUNITREE_SDK2_PATH=/your/path`
 - **按键没反应** → 确认运控模式、`[2/2] 接管完成` 已出现
 - **找不到 `arm7_action.dat`** → 先跑 `./teach`
 - **回放姿态偏很多** → 示教和回放请在**同一姿态**下进行（都在运控站立下录和放）
+- **网络相关问题**（上不了网、网卡选错、WiFi 连不上）→ 见文末 [环境配置指南](#-环境配置--environment-setup)
 
 ### License
 
@@ -79,6 +81,7 @@ Fastest teach-and-playback workflow for Unitree G1 upper body, built on top of t
 - **unitree_sdk2** installed at `/opt/unitree_robotics/unitree_sdk2` (latest version — needs G1 `hg` IDL and `AudioClient`).
 - **CycloneDDS** bundled under `thirdparty/lib/aarch64/` — do NOT use the system build.
 - CMake ≥ 3.10, GCC ≥ 7, C++14.
+- PC2 network already configured (WiFi, routing, interface) — see [Environment Setup](#-环境配置--environment-setup) at the bottom.
 
 ### Build
 
@@ -121,7 +124,18 @@ Pick interface (optional): `UNITREE_IFACE=eth1 ./play`. Default: auto-detect the
 - **Buttons do nothing** → confirm locomotion mode and that `[2/2] 接管完成` has printed.
 - **`arm7_action.dat` not found** → run `./teach` first.
 - **Replay pose drifts a lot** → teach & replay must be in the **same robot pose** (both in locomotion standing).
+- **Network issues** (no internet, wrong interface, WiFi won't connect) → see [Environment Setup](#-环境配置--environment-setup) at the bottom.
 
 ### License
 
 MIT
+
+---
+
+## 🔧 环境配置 / Environment Setup
+
+PC2 网络、WiFi、路由、DDS 网卡等配置详见：
+
+### 👉 [**docs/env-setup.md**](docs/env-setup.md)
+
+Network configuration, WiFi setup, routing fixes and DDS interface selection for G1 PC2 — see [**docs/env-setup.md**](docs/env-setup.md).
