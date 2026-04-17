@@ -55,6 +55,47 @@ SDK 装到非默认路径时：`cmake .. -DUNITREE_SDK2_PATH=/your/path`
 
 指定网卡（可选）：`UNITREE_IFACE=eth1 ./play`，默认自动挑 `192.168.123.x` 所在网卡。
 
+### 拳击模式（状态机示例）
+
+`play_with_motions` 是一个在 `play` 基础上加了**状态机**的示例，用来做连招（拳击 / 技能）。
+
+**先用 `teach_with_name` 录制动作文件**（保存到 `motions/<名字>.dat`，每段默认 0.3s）：
+
+```bash
+./teach_with_name
+# Enter 记录 → q → 输入名字 (如 guard / punch_left / punch_right / skill_y / skill_a)
+```
+
+需要至少录好这些：
+
+| 文件 | 录制内容 | 触发按键 |
+|---|---|---|
+| `motions/guard.dat` | 拳击预备姿势（1 个 waypoint 即可） | — |
+| `motions/punch_left.dat` | guard → 左拳峰值 → guard | X |
+| `motions/punch_right.dat` | guard → 右拳峰值 → guard | B |
+| `motions/skill_y.dat` | 任意，自包含（起止都是 guard） | Y |
+| `motions/skill_a.dat` | 任意，自包含（起止都是 guard） | A |
+
+**运行**：
+```bash
+./play_with_motions
+```
+
+状态机：
+```
+REST ──L1──→ GUARD ──L2──→ REST
+              ├──X──→ 左出拳（→ GUARD）
+              ├──B──→ 右出拳（→ GUARD）
+              ├──Y──→ 技能 Y（→ GUARD）
+              └──A──→ 技能 A（→ GUARD）
+```
+
+- **R1+R2 只在 REST 状态下有效**（按 L2 回到 REST 后才能退出）；随时可用 Ctrl+C
+- 动作进行中**忽略所有按键**，做完自动回 GUARD
+- 进入 GUARD / 动作完成后会**清空输入缓冲**，必须松开按键再按下才触发（防止"刚进入就冲出去"）
+- LED 全程**虹-蓝-虹-蓝**闪烁
+- 动作文件每段时长可编辑：`<duration> q0 q1 ... q13` 每行，不填就用默认 0.3s
+
 ### 常见问题
 
 - **按键没反应** → 确认运控模式、`[2/2] 接管完成` 已出现
@@ -118,6 +159,47 @@ Custom SDK path: `cmake .. -DUNITREE_SDK2_PATH=/your/path`
 | Ctrl+C | Same as above | off |
 
 Pick interface (optional): `UNITREE_IFACE=eth1 ./play`. Default: auto-detect the `192.168.123.x` interface.
+
+### Boxing mode (state-machine demo)
+
+`play_with_motions` is a state-machine demo on top of `play` for combos (boxing / skills).
+
+**First, record motion files with `teach_with_name`** (saved under `motions/<name>.dat`, 0.3s per segment by default):
+
+```bash
+./teach_with_name
+# Enter to record → q → type a name (e.g. guard / punch_left / punch_right / skill_y / skill_a)
+```
+
+Expected files:
+
+| File | Content | Button |
+|---|---|---|
+| `motions/guard.dat` | Boxing guard pose (1 waypoint is enough) | — |
+| `motions/punch_left.dat` | guard → left punch peak → guard | X |
+| `motions/punch_right.dat` | guard → right punch peak → guard | B |
+| `motions/skill_y.dat` | Self-contained (starts & ends at guard) | Y |
+| `motions/skill_a.dat` | Self-contained (starts & ends at guard) | A |
+
+**Run**:
+```bash
+./play_with_motions
+```
+
+State machine:
+```
+REST ──L1──→ GUARD ──L2──→ REST
+              ├──X──→ left jab (→ GUARD)
+              ├──B──→ right jab (→ GUARD)
+              ├──Y──→ skill Y (→ GUARD)
+              └──A──→ skill A (→ GUARD)
+```
+
+- **R1+R2 only works in REST** (press L2 to return to REST first); Ctrl+C always works
+- All buttons are ignored while a motion is playing; control returns to GUARD when it finishes
+- Input buffer is cleared when entering GUARD / after a motion — you must release and re-press to trigger
+- LED flashes rainbow-blue throughout
+- Per-segment duration in file: `<duration> q0 q1 ... q13` per line; omit to use the default 0.3s
 
 ### Troubleshooting
 

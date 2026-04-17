@@ -27,3 +27,9 @@ target_link_libraries(teach ${UNITREE_LIBS})
 
 add_executable(play play.cpp)
 target_link_libraries(play ${UNITREE_LIBS})
+
+add_executable(teach_with_name teach_with_name.cpp)
+target_link_libraries(teach_with_name ${UNITREE_LIBS})
+
+add_executable(play_with_motions play_with_motions.cpp)
+target_link_libraries(play_with_motions ${UNITREE_LIBS})
