@@ -53,7 +53,26 @@ SDK 装到非默认路径时：`cmake .. -DUNITREE_SDK2_PATH=/your/path`
 | R1+R2 | 安全退出（weight 平滑降 0） | 熄 |
 | Ctrl+C | 同上 | 熄 |
 
+- 回放速度由 `INTERP_T` 控制（默认 `1.5s`，约 2× 初版速度）。
+- 启动接管完成后会通过机器人扬声器用英文喊一句 `Playback mode ready`（`audio.SetVolume(100)` 拉到最大音量）。
+
 指定网卡（可选）：`UNITREE_IFACE=eth1 ./play`，默认自动挑 `192.168.123.x` 所在网卡。
+
+### Watchdog（一键启动 play 的常驻守护）
+
+不想每次都手动敲 `./play` 可以跑一个后台守护进程，按 **L2+R1** 自动拉起 `play`：
+
+```bash
+nohup ./watchdog > ../logs/watchdog.log 2>&1 & disown
+tail -f ../logs/watchdog.log
+```
+
+- 纯订阅 `rt/lowstate`，**不发布任何 DDS 数据**，对其它程序零影响
+- 触发条件：**L2+R1 同按 ≥ 300ms**
+- `fork + exec` 启动 `play`，`waitpid` 等 play 退出后才重新待命
+- play 退出后要求组合键**完全释放 ≥ 200ms** 才允许再次触发，避免重按时自动再启一次
+- `/tmp/g1_arm7_watchdog.lock` 做单实例保护；play 运行期间忽略所有按键
+- 停止：`kill $(pgrep -x watchdog)`
 
 ### 拳击模式（状态机示例）
 
@@ -98,7 +117,7 @@ REST ──L1──→ GUARD ──L2──→ REST
 
 ### 常见问题
 
-- **按键没反应** → 确认运控模式、`[2/2] 接管完成` 已出现
+- **按键没反应** → 确认运控模式、`[2/2] engaged` 已出现
 - **找不到 `arm7_action.dat`** → 先跑 `./teach`
 - **回放姿态偏很多** → 示教和回放请在**同一姿态**下进行（都在运控站立下录和放）
 - **网络相关问题**（上不了网、网卡选错、WiFi 连不上）→ 见文末 [环境配置指南](#-环境配置--environment-setup)
@@ -158,7 +177,26 @@ Custom SDK path: `cmake .. -DUNITREE_SDK2_PATH=/your/path`
 | R1+R2 | Graceful exit (weight smoothly to 0) | off |
 | Ctrl+C | Same as above | off |
 
+- Playback speed is controlled by `INTERP_T` (default `1.5s`, ~2× the original).
+- Once engaged, the robot announces `Playback mode ready` over its speaker (`audio.SetVolume(100)` maxes the volume).
+
 Pick interface (optional): `UNITREE_IFACE=eth1 ./play`. Default: auto-detect the `192.168.123.x` interface.
+
+### Watchdog (background auto-launcher)
+
+If you don't want to type `./play` manually each time, run the background watchdog. It launches `play` when you hold **L2+R1**:
+
+```bash
+nohup ./watchdog > ../logs/watchdog.log 2>&1 & disown
+tail -f ../logs/watchdog.log
+```
+
+- Subscribes to `rt/lowstate` only, **publishes nothing** — zero interference with other programs.
+- Trigger: **L2+R1 held for ≥ 300 ms**.
+- `fork + exec` launches `play`; `waitpid` blocks until `play` exits before re-arming.
+- Requires the combo to be **fully released for ≥ 200 ms** after `play` exits to prevent auto-retrigger.
+- Single-instance protected via `/tmp/g1_arm7_watchdog.lock`; all keys are ignored while `play` is running.
+- Stop it with: `kill $(pgrep -x watchdog)`
 
 ### Boxing mode (state-machine demo)
 
@@ -203,7 +241,7 @@ REST ──L1──→ GUARD ──L2──→ REST
 
 ### Troubleshooting
 
-- **Buttons do nothing** → confirm locomotion mode and that `[2/2] 接管完成` has printed.
+- **Buttons do nothing** → confirm locomotion mode and that `[2/2] engaged` has printed.
 - **`arm7_action.dat` not found** → run `./teach` first.
 - **Replay pose drifts a lot** → teach & replay must be in the **same robot pose** (both in locomotion standing).
 - **Network issues** (no internet, wrong interface, WiFi won't connect) → see [Environment Setup](#-环境配置--environment-setup) at the bottom.

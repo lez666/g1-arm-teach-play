@@ -1,19 +1,20 @@
 /**
- * play.cpp — G1 Arm7 Joystick Playback  [最终版]
+ * play.cpp - G1 Arm7 Joystick Playback  [Final]
  * ================================================
- * 参考: unitree_sdk2/example/g1/high_level/g1_arm7_sdk_dds_example.cpp
+ * Reference: unitree_sdk2/example/g1/high_level/g1_arm7_sdk_dds_example.cpp
  *
- * 腰部: 启动时锁在初始角，全程 KP=200/KD=2
+ * Waist: locked at initial angle on startup, KP=200/KD=2 throughout.
  *
- * 操作:
- *   L1     → 端矛（正向播放）
- *   L2     → 收回（反向播放回休息位）
- *   R1+R2  → 退出
- *   Ctrl+C → 退出
+ * Controls:
+ *   L1     -> Do action (forward playback)
+ *   L2     -> Retract (reverse playback back to rest pose)
+ *   R1+R2  -> Exit
+ *   Ctrl+C -> Exit
  *
- * LED: 绿=休息 蓝=运动中 红(255,80,80)=端矛 熄=退出
+ * LED: green=rest, blue=moving, red(255,80,80)=action held, off=exit
  *
- * 网卡: 自动选择 192.168.123.x 所在接口（可用 UNITREE_IFACE 环境变量覆盖）
+ * Network: auto-pick the 192.168.123.x interface
+ *          (override with UNITREE_IFACE env var)
  */
 
 #include <algorithm>
@@ -48,7 +49,7 @@ using namespace unitree::robot;
 using unitree_hg::msg::dds_::LowCmd_;
 using unitree_hg::msg::dds_::LowState_;
 
-// ── 关节索引 (3-DOF 腰版本) ──────────────────────────────────────────────
+// Joint indices (3-DOF waist version)
 static constexpr int N_ARM      = 14;
 static constexpr int N_TOTAL    = 17;
 static constexpr int WEIGHT_IDX = 29;
@@ -59,16 +60,16 @@ static constexpr int JOINT_IDX[N_TOTAL] = {
     12, 13, 14
 };
 
-// ── 控制参数 ────────────────────────────────────────────────────────────
+// Control parameters
 static constexpr float KP_ARM   = 60.0f;
 static constexpr float KD_ARM   = 1.5f;
 static constexpr float KP_WAIST = 200.0f;
 static constexpr float KD_WAIST = 2.0f;
 static constexpr float ENGAGE_T = 2.0f;
-static constexpr float INTERP_T = 3.0f;
+static constexpr float INTERP_T = 1.5f;   // time per waypoint segment (seconds)
 static constexpr int   LOOP_US  = 2000;
 
-// ── 遥控器按键位 ─────────────────────────────────────────────────────────
+// Remote key bits
 static constexpr uint16_t KEY_R1 = (1 << 0);
 static constexpr uint16_t KEY_L1 = (1 << 1);
 static constexpr uint16_t KEY_R2 = (1 << 4);
@@ -76,7 +77,7 @@ static constexpr uint16_t KEY_L2 = (1 << 5);
 
 static const char* ACTION_FILE = "arm7_action.dat";
 
-// ── 全局状态 ─────────────────────────────────────────────────────────────
+// Global state
 static LowState_          g_state{};
 static std::mutex         g_state_mtx;
 static std::atomic<bool>  g_running{true};
@@ -89,14 +90,14 @@ static void on_lowstate(const void* msg) {
 }
 
 static void on_signal(int) {
-    std::cout << "\n[SIGNAL] 收到退出信号...\n";
+    std::cout << "\n[SIGNAL] exit signal received\n";
     g_running = false;
 }
 
-// ── 自动挑选机器人内网网卡 (192.168.123.0/24) ───────────────────────────
+// Auto-pick robot intranet interface (192.168.123.0/24)
 static std::string pick_robot_iface() {
     if (const char* env = std::getenv("UNITREE_IFACE")) {
-        if (env[0]) { std::cout << "[NET] 使用环境变量指定网卡: " << env << "\n"; return env; }
+        if (env[0]) { std::cout << "[NET] using env iface: " << env << "\n"; return env; }
     }
     struct ifaddrs* ifs = nullptr;
     if (getifaddrs(&ifs) == 0) {
@@ -106,7 +107,7 @@ static std::string pick_robot_iface() {
             uint32_t ip = ntohl(sin->sin_addr.s_addr);
             if ((ip & 0xFFFFFF00u) == 0xC0A87B00u) {
                 std::string name = p->ifa_name ? p->ifa_name : "";
-                std::cout << "[NET] 自动选中网卡: " << name
+                std::cout << "[NET] auto-selected iface: " << name
                           << " (IP " << ((ip>>24)&0xff) << "." << ((ip>>16)&0xff)
                           << "." << ((ip>>8)&0xff) << "." << (ip&0xff) << ")\n";
                 freeifaddrs(ifs);
@@ -115,11 +116,11 @@ static std::string pick_robot_iface() {
         }
         freeifaddrs(ifs);
     }
-    std::cerr << "[NET][WARN] 没找到 192.168.123.x 网卡，回退到 eth0\n";
+    std::cerr << "[NET][WARN] no 192.168.123.x iface found, falling back to eth0\n";
     return "eth0";
 }
 
-// ── 类型别名 ─────────────────────────────────────────────────────────────
+// Type aliases
 using ArmQ   = std::array<float, N_ARM>;
 using TotalQ = std::array<float, N_TOTAL>;
 
@@ -140,25 +141,25 @@ static ArmQ get_arm_q() {
 }
 
 static uint16_t read_keys() {
-    // wireless_remote 格式: [0..1]=head, [2..3]=btn(uint16), [4..]=摇杆浮点
+    // wireless_remote format: [0..1]=head, [2..3]=btn(uint16), [4..]=stick floats
     uint16_t k = 0;
     std::lock_guard<std::mutex> lk(g_state_mtx);
     std::memcpy(&k, &g_state.wireless_remote()[2], 2);
     return k;
 }
 
-// R1+R2 同按 → 退出（任何时刻都能触发）
+// R1+R2 pressed together -> exit (can trigger at any time)
 static bool check_exit_combo() {
     const uint16_t k = read_keys();
     if ((k & KEY_R1) && (k & KEY_R2)) {
-        std::cout << "\n[EXIT] R1+R2 退出\n";
+        std::cout << "\n[EXIT] R1+R2 pressed\n";
         g_running = false;
         return true;
     }
     return false;
 }
 
-// ── cmd 写入 ─────────────────────────────────────────────────────────────
+// cmd writer
 static void apply_cmd(LowCmd_& cmd,
                       const ArmQ& arm_q,
                       const TotalQ& q_init)
@@ -183,8 +184,7 @@ static ArmQ lerp_arm(const ArmQ& a, const ArmQ& b, float t) {
     return r;
 }
 
-// ── LED ──────────────────────────────────────────────────────────────────
-// 重试 3 次并打印错误码，方便排查 LED 不亮的问题
+// LED: retry 3x and print error code to help debug
 static void set_led(unitree::robot::g1::AudioClient& audio,
                     uint8_t r, uint8_t g, uint8_t b) {
     for (int attempt = 0; attempt < 3; ++attempt) {
@@ -192,12 +192,12 @@ static void set_led(unitree::robot::g1::AudioClient& audio,
         try { ret = audio.LedControl(r, g, b); } catch (...) { ret = -999; }
         if (ret == 0) return;
         std::cerr << "[LED] LedControl(" << (int)r << "," << (int)g << ","
-                  << (int)b << ") 尝试#" << (attempt+1) << " 返回 " << ret << "\n";
+                  << (int)b << ") attempt#" << (attempt+1) << " returned " << ret << "\n";
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 }
 
-// ── weight ramp ──────────────────────────────────────────────────────────
+// weight ramp
 static void ramp_weight_up(
     std::shared_ptr<ChannelPublisher<LowCmd_>>& pub,
     LowCmd_& cmd, float duration,
@@ -229,7 +229,7 @@ static void ramp_down(
     pub->Write(cmd);
 }
 
-// 插值运动：L1/L2 触发后依次到达下一个 waypoint；R1+R2 可随时中断
+// Interpolated motion between waypoints. R1+R2 can interrupt at any time.
 static ArmQ interp_move(
     std::shared_ptr<ChannelPublisher<LowCmd_>>& pub,
     LowCmd_& cmd,
@@ -239,7 +239,7 @@ static ArmQ interp_move(
     const int steps = static_cast<int>(duration / (LOOP_US * 1e-6f));
     ArmQ q_cur = q_from;
     for (int i = 0; i < steps && g_running; ++i) {
-        // 每 50 步 (~100ms) 检查一次退出组合键
+        // Check exit combo every 50 steps (~100ms)
         if ((i % 50) == 0 && check_exit_combo()) break;
         q_cur = lerp_arm(q_from, q_to, static_cast<float>(i+1)/steps);
         apply_cmd(cmd, q_cur, q_init);
@@ -249,21 +249,21 @@ static ArmQ interp_move(
     return q_cur;
 }
 
-// ── 加载动作文件 ──────────────────────────────────────────────────────────
+// Load action file
 static std::vector<ArmQ> load_action() {
     std::ifstream f(ACTION_FILE);
     if (!f) throw std::runtime_error(
-        std::string("找不到: ") + ACTION_FILE + "，请先运行 ./teach");
+        std::string("file not found: ") + ACTION_FILE + " (run ./teach first)");
     int n_wp=0, n_j=0;
     f >> n_wp >> n_j;
-    if (n_j != N_ARM) throw std::runtime_error("关节数不匹配，重新 ./teach");
+    if (n_j != N_ARM) throw std::runtime_error("joint count mismatch, please re-run ./teach");
     std::vector<ArmQ> wps(n_wp);
     for (auto& wp : wps) for (float& v : wp) f >> v;
-    if (f.fail()) throw std::runtime_error("文件读取失败");
+    if (f.fail()) throw std::runtime_error("file read failed");
     return wps;
 }
 
-// ════════════════════════════════════════════════════════════════════════
+// ========================================================================
 int main() {
     std::signal(SIGINT,  on_signal);
     std::signal(SIGTERM, on_signal);
@@ -275,10 +275,10 @@ int main() {
     }
 
     std::cout << "===========================================\n"
-              << "  G1 Arm7 - 回放模式\n"
-              << "  已加载 " << waypoints.size() << " 个 waypoint\n"
-              << "  L1 = 端矛    L2 = 收回\n"
-              << "  R1+R2 = 退出    Ctrl+C = 退出\n"
+              << "  G1 Arm7 - Playback Mode\n"
+              << "  loaded " << waypoints.size() << " waypoint(s)\n"
+              << "  L1 = Do action    L2 = Retract\n"
+              << "  R1+R2 = Exit    Ctrl+C = Exit\n"
               << "===========================================\n\n";
 
     const std::string iface = pick_robot_iface();
@@ -293,13 +293,18 @@ int main() {
     unitree::robot::g1::AudioClient audio;
     audio.SetTimeout(3.0f);
     audio.Init();
-    // 抢占 LED：连续熄灭几次，覆盖掉系统守护进程可能已经设定的颜色
+    // Max out the volume so the voice prompt is clearly audible
+    {
+        int32_t ret = audio.SetVolume(100);
+        if (ret != 0) std::cerr << "[AUDIO] SetVolume(100) returned " << ret << "\n";
+    }
+    // Preempt LED: blank a few times to override the system daemon's color
     for (int i = 0; i < 5; ++i) {
         set_led(audio, 0, 0, 0);
         std::this_thread::sleep_for(std::chrono::milliseconds(80));
     }
 
-    std::cout << "[WAIT] 等待 lowstate 数据...\n";
+    std::cout << "[WAIT] waiting for lowstate ...\n";
     while (!g_state_received && g_running)
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     if (!g_running) return 0;
@@ -310,7 +315,7 @@ int main() {
     }
 
     TotalQ q_init = get_total_q();
-    std::cout << "[INFO] 腰部初始角 (rad): "
+    std::cout << "[INFO] waist initial angles (rad): "
               << std::fixed << std::setprecision(3)
               << q_init[14] << " " << q_init[15] << " " << q_init[16] << "\n";
 
@@ -321,13 +326,18 @@ int main() {
     set_weight(cmd, 0.0f);
     pub->Write(cmd);
 
-    std::cout << "[1/2] 接管 (weight 0→1) ...\n";
+    std::cout << "[1/2] engaging (weight 0->1) ...\n";
     ramp_weight_up(pub, cmd, ENGAGE_T, arm_init, q_init);
 
     static constexpr uint8_t RED_R = 255, RED_G = 80, RED_B = 80;
 
     set_led(audio, 0, 255, 0);
-    std::cout << "[2/2] 接管完成 | 绿灯 | 按 L1 端矛, L2 收回\n\n";
+    // Startup voice prompt (English, once)
+    {
+        int32_t ret = audio.TtsMaker("Playback mode ready", 1);
+        if (ret != 0) std::cerr << "[TTS] TtsMaker returned " << ret << "\n";
+    }
+    std::cout << "[2/2] engaged | green LED | press L1 to do action, L2 to retract\n\n";
 
     ArmQ  q_rest      = arm_init;
     ArmQ  q_current   = q_rest;
@@ -339,9 +349,9 @@ int main() {
     while (g_running) {
         const uint16_t keys = read_keys();
 
-        // R1+R2 同按 → 退出（最高优先级）
+        // R1+R2 pressed together -> exit (highest priority)
         if ((keys & KEY_R1) && (keys & KEY_R2)) {
-            std::cout << "[EXIT] R1+R2 退出\n";
+            std::cout << "[EXIT] R1+R2 pressed\n";
             g_running = false;
             break;
         }
@@ -354,7 +364,7 @@ int main() {
         prev_l2 = l2_cur;
 
         if (l1_rise && !is_up) {
-            std::cout << "[ACTION] 端矛 (L1) | 蓝灯...\n";
+            std::cout << "[ACTION] do action (L1) | blue LED ...\n";
             set_led(audio, 0, 0, 255);
 
             ArmQ q_from = get_arm_q();
@@ -377,10 +387,10 @@ int main() {
               prev_l2 = (k & KEY_L2) != 0; }
 
             set_led(audio, RED_R, RED_G, RED_B);
-            std::cout << "[ACTION] 端矛保持 | 红灯 | 按 L2 收回\n\n";
+            std::cout << "[ACTION] action held | red LED | press L2 to retract\n\n";
 
         } else if (l2_rise && is_up) {
-            std::cout << "[ACTION] 收回 (L2) | 蓝灯...\n";
+            std::cout << "[ACTION] retract (L2) | blue LED ...\n";
             set_led(audio, 0, 0, 255);
 
             ArmQ q_from = get_arm_q();
@@ -389,7 +399,7 @@ int main() {
                 q_from = interp_move(pub, cmd, q_from, waypoints[i], INTERP_T, q_init);
             }
             if (g_running) {
-                std::cout << "  <- 休息位\n";
+                std::cout << "  <- rest pose\n";
                 interp_move(pub, cmd, q_from, q_rest, INTERP_T, q_init);
             }
             if (!g_running) break;
@@ -407,12 +417,12 @@ int main() {
               prev_l2 = (k & KEY_L2) != 0; }
 
             set_led(audio, 0, 255, 0);
-            std::cout << "[ACTION] 收回完成 | 绿灯 | 按 L1 端矛\n\n";
+            std::cout << "[ACTION] retract done | green LED | press L1 to do action\n\n";
 
         } else {
             apply_cmd(cmd, q_current, q_init);
             pub->Write(cmd);
-            // 更高频率刷 LED（~500ms 一次），抢占系统守护进程
+            // Refresh LED every ~500ms to preempt the system daemon
             if (++led_refresh >= 250) {
                 led_refresh = 0;
                 if (is_up) set_led(audio, RED_R, RED_G, RED_B);
@@ -422,11 +432,11 @@ int main() {
         }
     }
 
-    std::cout << "[EXIT] weight 1→0 ...\n";
+    std::cout << "[EXIT] weight 1->0 ...\n";
     set_led(audio, 0, 0, 0);
     ArmQ q_exit = get_arm_q();
     ramp_down(pub, cmd, ENGAGE_T, q_exit, q_init);
 
-    std::cout << "[EXIT] 完成\n";
+    std::cout << "[EXIT] done\n";
     return 0;
 }

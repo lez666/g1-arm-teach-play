@@ -1,12 +1,14 @@
 /**
- * teach.cpp — G1 Arm7 Kinesthetic Teaching  [最终版]
+ * teach.cpp - G1 Arm7 Kinesthetic Teaching  [Final]
  * ====================================================
- * 参考: unitree_sdk2/example/g1/high_level/g1_arm7_sdk_dds_example.cpp
+ * Reference: unitree_sdk2/example/g1/high_level/g1_arm7_sdk_dds_example.cpp
  *
- * 腰部: 3 个关节 (12,13,14) 纳入 arm_sdk，启动时锁在初始角，全程 KP=200/KD=2
- * 手臂: 重力补偿 (kp=0, kd=0.8)，可自由拖动
+ * Waist: 3 joints (12,13,14) are controlled via arm_sdk,
+ *        locked at their initial angle on startup, KP=200/KD=2 throughout.
+ * Arms:  gravity compensation (kp=0, kd=0.8), free to drag.
  *
- * 网卡: 自动选择 192.168.123.x 所在接口（可用 UNITREE_IFACE 环境变量覆盖）
+ * Network: auto-pick the 192.168.123.x interface
+ *          (override with UNITREE_IFACE env var)
  */
 
 #include <algorithm>
@@ -39,18 +41,18 @@ using namespace unitree::robot;
 using unitree_hg::msg::dds_::LowCmd_;
 using unitree_hg::msg::dds_::LowState_;
 
-// ── 关节索引 (3-DOF 腰版本) ──────────────────────────────────────────────
+// Joint indices (3-DOF waist version)
 static constexpr int N_ARM      = 14;
-static constexpr int N_TOTAL    = 17;   // 14 手臂 + 3 腰部
+static constexpr int N_TOTAL    = 17;   // 14 arm + 3 waist
 static constexpr int WEIGHT_IDX = 29;
 
 static constexpr int JOINT_IDX[N_TOTAL] = {
-    15, 16, 17, 18, 19, 20, 21,  // 左臂
-    22, 23, 24, 25, 26, 27, 28,  // 右臂
-    12, 13, 14                    // 腰部 yaw/roll/pitch
+    15, 16, 17, 18, 19, 20, 21,  // left arm
+    22, 23, 24, 25, 26, 27, 28,  // right arm
+    12, 13, 14                    // waist yaw/roll/pitch
 };
 
-// ── 控制参数 ────────────────────────────────────────────────────────────
+// Control parameters
 static constexpr float KP_ARM   = 60.0f;
 static constexpr float KD_ARM   = 1.5f;
 static constexpr float KP_WAIST = 200.0f;
@@ -61,7 +63,7 @@ static constexpr int   LOOP_US  = 2000;   // 500 Hz
 
 static const char* ACTION_FILE = "arm7_action.dat";
 
-// ── 全局状态 ─────────────────────────────────────────────────────────────
+// Global state
 static LowState_          g_state{};
 static std::mutex         g_state_mtx;
 static std::atomic<bool>  g_running{true};
@@ -74,14 +76,14 @@ static void on_lowstate(const void* msg) {
 }
 
 static void on_signal(int) {
-    std::cout << "\n[SIGNAL] 收到退出信号...\n";
+    std::cout << "\n[SIGNAL] exit signal received\n";
     g_running = false;
 }
 
-// ── 自动挑选机器人内网网卡 (192.168.123.0/24) ───────────────────────────
+// Auto-pick robot intranet interface (192.168.123.0/24)
 static std::string pick_robot_iface() {
     if (const char* env = std::getenv("UNITREE_IFACE")) {
-        if (env[0]) { std::cout << "[NET] 使用环境变量指定网卡: " << env << "\n"; return env; }
+        if (env[0]) { std::cout << "[NET] using env iface: " << env << "\n"; return env; }
     }
     struct ifaddrs* ifs = nullptr;
     if (getifaddrs(&ifs) == 0) {
@@ -91,7 +93,7 @@ static std::string pick_robot_iface() {
             uint32_t ip = ntohl(sin->sin_addr.s_addr);
             if ((ip & 0xFFFFFF00u) == 0xC0A87B00u) {  // 192.168.123.0/24
                 std::string name = p->ifa_name ? p->ifa_name : "";
-                std::cout << "[NET] 自动选中网卡: " << name
+                std::cout << "[NET] auto-selected iface: " << name
                           << " (IP " << ((ip>>24)&0xff) << "." << ((ip>>16)&0xff)
                           << "." << ((ip>>8)&0xff) << "." << (ip&0xff) << ")\n";
                 freeifaddrs(ifs);
@@ -100,11 +102,11 @@ static std::string pick_robot_iface() {
         }
         freeifaddrs(ifs);
     }
-    std::cerr << "[NET][WARN] 没找到 192.168.123.x 网卡，回退到 eth0\n";
+    std::cerr << "[NET][WARN] no 192.168.123.x iface found, falling back to eth0\n";
     return "eth0";
 }
 
-// ── 类型别名 ─────────────────────────────────────────────────────────────
+// Type aliases
 using ArmQ   = std::array<float, N_ARM>;
 using TotalQ = std::array<float, N_TOTAL>;
 
@@ -124,7 +126,7 @@ static ArmQ get_arm_q() {
     return q;
 }
 
-// ── cmd 写入 (加锁消除竞态) ─────────────────────────────────────────────
+// cmd writer (locked to avoid races)
 static std::mutex g_cmd_mtx;
 
 static void apply_cmd(LowCmd_& cmd, const TotalQ& q,
@@ -183,7 +185,7 @@ static void ramp_down(
     publish_locked(pub, cmd);
 }
 
-// ════════════════════════════════════════════════════════════════════════
+// ========================================================================
 int main() {
     std::signal(SIGINT,  on_signal);
     std::signal(SIGTERM, on_signal);
@@ -197,7 +199,7 @@ int main() {
     auto sub = std::make_shared<ChannelSubscriber<LowState_>>("rt/lowstate");
     sub->InitChannel(on_lowstate, 10);
 
-    std::cout << "[WAIT] 等待 lowstate 数据...\n";
+    std::cout << "[WAIT] waiting for lowstate ...\n";
     while (!g_state_received && g_running)
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     if (!g_running) return 0;
@@ -208,13 +210,13 @@ int main() {
     }
 
     std::cout << "===========================================\n"
-              << "  G1 Arm7 - 教学模式\n"
-              << "  腰部全程锁定，手臂可自由拖动\n"
-              << "  Enter = 记录    q = 保存退出\n"
+              << "  G1 Arm7 - Teach Mode\n"
+              << "  waist locked, arms free to drag\n"
+              << "  Enter = record    q = save & exit\n"
               << "===========================================\n\n";
 
     TotalQ q_init = get_total_q();
-    std::cout << "[INFO] 腰部初始角 (rad): "
+    std::cout << "[INFO] waist initial angles (rad): "
               << std::fixed << std::setprecision(3)
               << q_init[14] << " " << q_init[15] << " " << q_init[16] << "\n";
 
@@ -222,9 +224,9 @@ int main() {
     set_weight_locked(cmd, 0.0f);
     publish_locked(pub, cmd);
 
-    std::cout << "[1/3] 接管 (weight 0→1) ...\n";
+    std::cout << "[1/3] engaging (weight 0->1) ...\n";
     ramp_weight_up(pub, cmd, ENGAGE_T, q_init);
-    std::cout << "[2/3] 接管完成，切换重力补偿...\n";
+    std::cout << "[2/3] engaged, switching to gravity compensation ...\n";
 
     std::atomic<bool> teach_done{false};
 
@@ -250,13 +252,13 @@ int main() {
         }
     });
 
-    std::cout << "[3/3] 重力补偿启用 | 腰部锁定 | 可拖动手臂\n\n";
+    std::cout << "[3/3] gravity comp enabled | waist locked | drag arms freely\n\n";
 
     std::vector<ArmQ> waypoints;
     std::string line;
 
     while (g_running.load()) {
-        std::cout << "[Enter]=记录  [q]=保存退出 > " << std::flush;
+        std::cout << "[Enter]=record  [q]=save & exit > " << std::flush;
         if (!std::getline(std::cin, line)) break;
         if (line == "q" || line == "Q") break;
         ArmQ snap = get_arm_q();
@@ -272,14 +274,14 @@ int main() {
     g_running  = false;
     gcomp.join();
 
-    std::cout << "\n[EXIT] weight 1→0 ...\n";
+    std::cout << "\n[EXIT] weight 1->0 ...\n";
     TotalQ q_exit = get_total_q();
     for (int i = N_ARM; i < N_TOTAL; ++i) q_exit[i] = q_init[i];
     ramp_down(pub, cmd, ENGAGE_T, q_exit);
 
     if (!waypoints.empty()) {
         std::ofstream f(ACTION_FILE);
-        if (!f) { std::cerr << "[ERROR] 无法写入 " << ACTION_FILE << "\n"; return 1; }
+        if (!f) { std::cerr << "[ERROR] cannot write " << ACTION_FILE << "\n"; return 1; }
         f << waypoints.size() << "\n" << N_ARM << "\n";
         for (const auto& wp : waypoints)
             for (int i = 0; i < N_ARM; ++i)
@@ -287,7 +289,7 @@ int main() {
                   << wp[i] << (i < N_ARM-1 ? " " : "\n");
         std::cout << "[SAVED] " << waypoints.size() << " waypoints -> " << ACTION_FILE << "\n";
     } else {
-        std::cout << "[WARN] 无 waypoint，未保存\n";
+        std::cout << "[WARN] no waypoints recorded, not saved\n";
     }
     return 0;
 }

@@ -1,4 +1,5 @@
 build/
+logs/
 *.dat
 *.o
 *.a

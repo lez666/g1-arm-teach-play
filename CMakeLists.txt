@@ -33,3 +33,6 @@ target_link_libraries(teach_with_name ${UNITREE_LIBS})
 
 add_executable(play_with_motions play_with_motions.cpp)
 target_link_libraries(play_with_motions ${UNITREE_LIBS})
+
+add_executable(watchdog watchdog.cpp)
+target_link_libraries(watchdog ${UNITREE_LIBS})
