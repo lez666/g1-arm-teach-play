@@ -74,6 +74,30 @@ tail -f ../logs/watchdog.log
 - `/tmp/g1_arm7_watchdog.lock` 做单实例保护；play 运行期间忽略所有按键
 - 停止：`kill $(pgrep -x watchdog)`
 
+#### 开机自启（systemd）
+
+仓库内自带 `systemd/g1-arm7-watchdog.service`。一次安装，永久开机自启：
+
+```bash
+sudo install -m 644 systemd/g1-arm7-watchdog.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now g1-arm7-watchdog.service
+```
+
+常用命令：
+
+```bash
+systemctl status g1-arm7-watchdog     # 看状态
+journalctl -u g1-arm7-watchdog -f     # 看实时日志
+sudo systemctl restart g1-arm7-watchdog
+sudo systemctl disable --now g1-arm7-watchdog   # 停用开机自启
+```
+
+- 以 `unitree` 用户身份运行，不是 root
+- 启动前 `sleep 10` 让运控主控的 DDS 先就绪
+- 崩溃会 `Restart=on-failure`；正常退出（例如你 `systemctl stop`）不重启
+- 日志走 journald；`/tmp` 非私有以保持和交互式 watchdog 共用同一把 flock
+
 ### 拳击模式（状态机示例）
 
 `play_with_motions` 是一个在 `play` 基础上加了**状态机**的示例，用来做连招（拳击 / 技能）。
@@ -197,6 +221,30 @@ tail -f ../logs/watchdog.log
 - Requires the combo to be **fully released for ≥ 200 ms** after `play` exits to prevent auto-retrigger.
 - Single-instance protected via `/tmp/g1_arm7_watchdog.lock`; all keys are ignored while `play` is running.
 - Stop it with: `kill $(pgrep -x watchdog)`
+
+#### Auto-start at boot (systemd)
+
+The repo ships with `systemd/g1-arm7-watchdog.service`. Install once, auto-start forever:
+
+```bash
+sudo install -m 644 systemd/g1-arm7-watchdog.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now g1-arm7-watchdog.service
+```
+
+Useful commands:
+
+```bash
+systemctl status g1-arm7-watchdog     # current state
+journalctl -u g1-arm7-watchdog -f     # tail live logs
+sudo systemctl restart g1-arm7-watchdog
+sudo systemctl disable --now g1-arm7-watchdog   # undo auto-start
+```
+
+- Runs as user `unitree`, not root.
+- Has a 10 s `sleep` prelude so the locomotion controller's DDS is up first.
+- Restarts on crash (`Restart=on-failure`), but stays down if you explicitly stop it.
+- Logs go to journald. `PrivateTmp=false` so the `/tmp/g1_arm7_watchdog.lock` stays visible to interactive shells too.
 
 ### Boxing mode (state-machine demo)
 
