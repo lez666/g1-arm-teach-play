@@ -36,3 +36,6 @@ target_link_libraries(play_with_motions ${UNITREE_LIBS})
 
 add_executable(watchdog watchdog.cpp)
 target_link_libraries(watchdog ${UNITREE_LIBS})
+
+add_executable(tts_probe tts_probe.cpp)
+target_link_libraries(tts_probe ${UNITREE_LIBS})

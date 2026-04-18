@@ -66,7 +66,7 @@ static constexpr float KD_ARM   = 1.5f;
 static constexpr float KP_WAIST = 200.0f;
 static constexpr float KD_WAIST = 2.0f;
 static constexpr float ENGAGE_T = 2.0f;
-static constexpr float INTERP_T = 1.5f;   // time per waypoint segment (seconds)
+static constexpr float INTERP_T = 0.3f;   // time per waypoint segment (seconds) -- 10x speed
 static constexpr int   LOOP_US  = 2000;
 
 // Remote key bits
