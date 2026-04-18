@@ -332,10 +332,10 @@ int main() {
     static constexpr uint8_t RED_R = 255, RED_G = 80, RED_B = 80;
 
     set_led(audio, 0, 255, 0);
-    // Startup voice prompt (English, once)
+    // Startup voice prompt (English, once, on successful engage)
     {
-        int32_t ret = audio.TtsMaker("Playback mode ready", 1);
-        if (ret != 0) std::cerr << "[TTS] TtsMaker returned " << ret << "\n";
+        int32_t ret = audio.TtsMaker("welcome to the interactive combat league", 1);
+        if (ret != 0) std::cerr << "[TTS] TtsMaker (enter) returned " << ret << "\n";
     }
     std::cout << "[2/2] engaged | green LED | press L1 to do action, L2 to retract\n\n";
 
@@ -434,6 +434,12 @@ int main() {
 
     std::cout << "[EXIT] weight 1->0 ...\n";
     set_led(audio, 0, 0, 0);
+    // Exit voice prompt (fires before ramp_down so it plays while the
+    // arm is smoothly releasing)
+    {
+        int32_t ret = audio.TtsMaker("play mode terminated", 1);
+        if (ret != 0) std::cerr << "[TTS] TtsMaker (exit) returned " << ret << "\n";
+    }
     ArmQ q_exit = get_arm_q();
     ramp_down(pub, cmd, ENGAGE_T, q_exit, q_init);
 

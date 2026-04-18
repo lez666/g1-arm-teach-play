@@ -54,7 +54,8 @@ SDK 装到非默认路径时：`cmake .. -DUNITREE_SDK2_PATH=/your/path`
 | Ctrl+C | 同上 | 熄 |
 
 - 回放速度由 `INTERP_T` 控制（默认 `1.5s`，约 2× 初版速度）。
-- 启动接管完成后会通过机器人扬声器用英文喊一句 `Playback mode ready`（`audio.SetVolume(100)` 拉到最大音量）。
+- 启动接管完成后用英文喊一句 **`welcome to the interactive combat league`**，退出（R1+R2 / Ctrl+C）时喊 **`play mode terminated`**。
+- `audio.SetVolume(100)` 在启动时把音量拉满，确保现场听得清。
 
 指定网卡（可选）：`UNITREE_IFACE=eth1 ./play`，默认自动挑 `192.168.123.x` 所在网卡。
 
@@ -203,7 +204,8 @@ Custom SDK path: `cmake .. -DUNITREE_SDK2_PATH=/your/path`
 | Ctrl+C | Same as above | off |
 
 - Playback speed is controlled by `INTERP_T` (default `1.5s`, ~2× the original).
-- Once engaged, the robot announces `Playback mode ready` over its speaker (`audio.SetVolume(100)` maxes the volume).
+- On successful engage the robot says **`welcome to the interactive combat league`**; on exit (R1+R2 / Ctrl+C) it says **`play mode terminated`**.
+- `audio.SetVolume(100)` on startup maxes the volume so the announcements are audible.
 
 Pick interface (optional): `UNITREE_IFACE=eth1 ./play`. Default: auto-detect the `192.168.123.x` interface.
 
