@@ -67,7 +67,8 @@ nohup ./watchdog > ../logs/watchdog.log 2>&1 & disown
 tail -f ../logs/watchdog.log
 ```
 
-- 纯订阅 `rt/lowstate`，**不发布任何 DDS 数据**，对其它程序零影响
+- 纯订阅 `rt/lowstate`，**不发布任何控制 DDS 数据**（只在启动时用 `AudioClient` RPC 喊一句语音），对其它程序零影响
+- 启动就绪时机器人会用英文播报一句 **"motion activated"**（通过片上 TTS，不依赖公网；WiFi 断了也能响）
 - 触发条件：**L2+R1 同按 ≥ 300ms**
 - `fork + exec` 启动 `play`，`waitpid` 等 play 退出后才重新待命
 - play 退出后要求组合键**完全释放 ≥ 200ms** 才允许再次触发，避免重按时自动再启一次
@@ -215,7 +216,8 @@ nohup ./watchdog > ../logs/watchdog.log 2>&1 & disown
 tail -f ../logs/watchdog.log
 ```
 
-- Subscribes to `rt/lowstate` only, **publishes nothing** — zero interference with other programs.
+- Subscribes to `rt/lowstate` only, **publishes no control topic** (the only outgoing traffic is a one-shot `AudioClient` RPC for the boot announcement) — zero interference with other programs.
+- On successful boot the robot speaks **"motion activated"** in English via the on-board TTS engine. This uses the internal 192.168.123.x LAN only, so it works even when WiFi / public internet is down.
 - Trigger: **L2+R1 held for ≥ 300 ms**.
 - `fork + exec` launches `play`; `waitpid` blocks until `play` exits before re-arming.
 - Requires the combo to be **fully released for ≥ 200 ms** after `play` exits to prevent auto-retrigger.

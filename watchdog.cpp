@@ -44,6 +44,7 @@
 #include <unitree/idl/hg/LowState_.hpp>
 #include <unitree/robot/channel/channel_factory.hpp>
 #include <unitree/robot/channel/channel_subscriber.hpp>
+#include <unitree/robot/g1/audio/g1_audio_client.hpp>
 
 using namespace unitree::robot;
 using unitree_hg::msg::dds_::LowState_;
@@ -186,6 +187,22 @@ int main() {
         std::this_thread::sleep_for(std::chrono::milliseconds(POLL_MS));
     if (!g_running) return 0;
     std::cout << "[WD] ready, listening for L2+R1\n";
+
+    // Boot-success voice prompt.
+    // Uses the G1 on-board TTS engine via DDS RPC on the internal
+    // 192.168.123.x LAN -- works regardless of WiFi / public internet
+    // status.  If the internal bus is broken the RPC just times out and
+    // returns a non-zero code; we log and carry on.
+    {
+        unitree::robot::g1::AudioClient audio;
+        audio.SetTimeout(3.0f);
+        audio.Init();
+        int32_t rv = audio.SetVolume(100);
+        if (rv != 0) std::cerr << "[WD][AUDIO] SetVolume(100) returned " << rv << "\n";
+        int32_t rt = audio.TtsMaker("motion activated", 1);  // 1 = English
+        if (rt != 0) std::cerr << "[WD][TTS] TtsMaker returned " << rt << "\n";
+        else         std::cout << "[WD] announced 'motion activated'\n";
+    }
 
     // State machine
     enum State { IDLE, ARMING };
